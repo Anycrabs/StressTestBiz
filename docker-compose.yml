@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: fsm-db
+    environment:
+      POSTGRES_DB: finance_mvp
+      POSTGRES_USER: finance_user
+      POSTGRES_PASSWORD: finance_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finance_user -d finance_mvp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  backend:
+    build:
+      context: ./backend
+    container_name: fsm-backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://finance_user:finance_password@db:5432/finance_mvp
+      JWT_SECRET_KEY: super-secret-change-in-production
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 120
+      ALLOWED_ORIGINS: http://localhost:3000
+      HTTPS_REDIRECT: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:8000
+    container_name: fsm-frontend
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  postgres_data:
