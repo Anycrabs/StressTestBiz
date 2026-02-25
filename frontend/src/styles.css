@@ -294,6 +294,22 @@ button:disabled {
   width: 100%;
 }
 
+.slider-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.slider-controls input[type="range"] {
+  flex: 1;
+}
+
+.slider-number {
+  width: 118px;
+  min-width: 118px;
+  text-align: right;
+}
+
 input[type="range"] {
   height: 6px;
   border: none;
@@ -345,6 +361,10 @@ input[type="range"]::-moz-range-thumb {
 .custom-grid span {
   color: #9bacd9;
   font-size: 0.82rem;
+}
+
+.custom-number {
+  width: 100%;
 }
 
 .history-list {
@@ -626,11 +646,16 @@ tbody tr:hover {
   .auth-panel input,
   .auth-panel button,
   .block > input[type="text"],
+  .block > input[type="number"],
   .block > input[type="file"],
   .block > select,
   .block > button {
     width: 100%;
     margin-right: 0;
+  }
+
+  .slider-number {
+    min-width: 0;
   }
 
   .history-list li {

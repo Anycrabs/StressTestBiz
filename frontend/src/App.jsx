@@ -35,6 +35,12 @@ function percentNumber(value) {
   return `${Number(value || 0).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 }
 
+function clampNumber(value, min, max) {
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) return min;
+  return Math.min(max, Math.max(min, numeric));
+}
+
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem("fsm_token") || "");
   const [email, setEmail] = useState("demo@example.com");
@@ -250,31 +256,40 @@ export default function App() {
             {scenarioType === "fx_growth" && (
               <div className="slider-row">
                 <label>Курс валюты в сценарии: {scenarioFx}</label>
-                <input type="range" min="1" max="300" value={scenarioFx} onChange={(e) => setScenarioFx(e.target.value)} />
+                <div className="slider-controls">
+                  <input type="range" min="1" max="300" value={scenarioFx} onChange={(e) => setScenarioFx(clampNumber(e.target.value, 1, 300))} />
+                  <input className="slider-number" type="number" min="1" max="300" step="1" value={scenarioFx} onChange={(e) => setScenarioFx(clampNumber(e.target.value, 1, 300))} />
+                </div>
               </div>
             )}
 
             {scenarioType === "demand_drop" && (
               <div className="slider-row">
                 <label>Спрос (% от базового объема): {demandPercent}%</label>
-                <input type="range" min="1" max="200" value={demandPercent} onChange={(e) => setDemandPercent(e.target.value)} />
+                <div className="slider-controls">
+                  <input type="range" min="1" max="200" value={demandPercent} onChange={(e) => setDemandPercent(clampNumber(e.target.value, 1, 200))} />
+                  <input className="slider-number" type="number" min="1" max="200" step="1" value={demandPercent} onChange={(e) => setDemandPercent(clampNumber(e.target.value, 1, 200))} />
+                </div>
               </div>
             )}
 
             {scenarioType === "raw_material_growth" && (
               <div className="slider-row">
                 <label>Доля переменных затрат (%): {rawVcPercent}</label>
-                <input type="range" min="0" max="100" step="0.1" value={rawVcPercent} onChange={(e) => setRawVcPercent(e.target.value)} />
+                <div className="slider-controls">
+                  <input type="range" min="0" max="100" step="0.1" value={rawVcPercent} onChange={(e) => setRawVcPercent(clampNumber(e.target.value, 0, 100))} />
+                  <input className="slider-number" type="number" min="0" max="100" step="0.1" value={rawVcPercent} onChange={(e) => setRawVcPercent(clampNumber(e.target.value, 0, 100))} />
+                </div>
               </div>
             )}
 
             {scenarioType === "custom" && (
               <div className="custom-grid">
-                <label>Объем продаж<input type="range" min="0" max="1000000" value={customQ} onChange={(e) => setCustomQ(e.target.value)} /><span>{customQ}</span></label>
-                <label>Цена<input type="range" min="0" max="1000000" value={customPrice} onChange={(e) => setCustomPrice(e.target.value)} /><span>{customPrice}</span></label>
-                <label>Доля переменных затрат (%)<input type="range" min="0" max="100" step="0.1" value={customVc} onChange={(e) => setCustomVc(e.target.value)} /><span>{customVc}</span></label>
-                <label>Курс валюты<input type="range" min="0" max="500" step="0.1" value={customFx} onChange={(e) => setCustomFx(e.target.value)} /><span>{customFx}</span></label>
-                <label>Постоянные затраты<input type="range" min="0" max="1000000" value={customFc} onChange={(e) => setCustomFc(e.target.value)} /><span>{customFc}</span></label>
+                <label>Объем продаж<input type="range" min="0" max="1000000" value={customQ} onChange={(e) => setCustomQ(clampNumber(e.target.value, 0, 1000000))} /><input className="custom-number" type="number" min="0" max="1000000" step="1" value={customQ} onChange={(e) => setCustomQ(clampNumber(e.target.value, 0, 1000000))} /></label>
+                <label>Цена<input type="range" min="0" max="1000000" value={customPrice} onChange={(e) => setCustomPrice(clampNumber(e.target.value, 0, 1000000))} /><input className="custom-number" type="number" min="0" max="1000000" step="1" value={customPrice} onChange={(e) => setCustomPrice(clampNumber(e.target.value, 0, 1000000))} /></label>
+                <label>Доля переменных затрат (%)<input type="range" min="0" max="100" step="0.1" value={customVc} onChange={(e) => setCustomVc(clampNumber(e.target.value, 0, 100))} /><input className="custom-number" type="number" min="0" max="100" step="0.1" value={customVc} onChange={(e) => setCustomVc(clampNumber(e.target.value, 0, 100))} /></label>
+                <label>Курс валюты<input type="range" min="0" max="500" step="0.1" value={customFx} onChange={(e) => setCustomFx(clampNumber(e.target.value, 0, 500))} /><input className="custom-number" type="number" min="0" max="500" step="0.1" value={customFx} onChange={(e) => setCustomFx(clampNumber(e.target.value, 0, 500))} /></label>
+                <label>Постоянные затраты<input type="range" min="0" max="1000000" value={customFc} onChange={(e) => setCustomFc(clampNumber(e.target.value, 0, 1000000))} /><input className="custom-number" type="number" min="0" max="1000000" step="1" value={customFc} onChange={(e) => setCustomFc(clampNumber(e.target.value, 0, 1000000))} /></label>
               </div>
             )}
 
