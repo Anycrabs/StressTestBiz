@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 
 from app.api.auth import router as auth_router
@@ -21,15 +20,6 @@ def create_app() -> FastAPI:
 
     if settings.https_redirect:
         app.add_middleware(HTTPSRedirectMiddleware)
-
-    origins = [origin.strip() for origin in settings.allowed_origins.split(",") if origin.strip()]
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
 
     register_exception_handlers(app)
 

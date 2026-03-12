@@ -9,6 +9,28 @@ const METRICS = [
   { key: "ocf", label: "Операционный денежный поток" },
 ];
 
+const SCENARIO_TYPES = [
+  { key: "fx_growth", label: "Рост курса валюты" },
+  { key: "demand_drop", label: "Падение спроса" },
+  { key: "raw_material_growth", label: "Рост стоимости сырья" },
+  { key: "custom", label: "Пользовательский сценарий" },
+];
+
+const HELP_STEPS = [
+  {
+    title: "1. Войдите в систему",
+    text: "Создайте аккаунт или используйте уже зарегистрированную почту, чтобы открыть рабочее пространство моделирования.",
+  },
+  {
+    title: "2. Загрузите исходные данные",
+    text: "Поддерживаются CSV и JSON. В файле должны быть колонки q, price, vc_percent, fc, interest и tax_rate.",
+  },
+  {
+    title: "3. Выберите сценарий",
+    text: "Используйте готовые сценарии или настройте пользовательский вариант, затем запустите расчёт и сравните метрики.",
+  },
+];
+
 function riskClass(metricDelta) {
   if (!metricDelta) return "risk-green";
   return `risk-${metricDelta.risk}`;
@@ -41,11 +63,71 @@ function clampNumber(value, min, max) {
   return Math.min(max, Math.max(min, numeric));
 }
 
+function humanizeErrorMessage(message) {
+  if (!message) {
+    return "Произошла ошибка. Попробуйте ещё раз.";
+  }
+
+  if (message === "Failed to fetch") {
+    return "Не удалось связаться с сервером. Проверьте, что backend и frontend запущены.";
+  }
+
+  if (message === "User already exists") {
+    return "Пользователь с таким email уже зарегистрирован.";
+  }
+
+  if (message === "Invalid credentials") {
+    return "Неверная почта или пароль.";
+  }
+
+  if (message.startsWith("Missing required columns:")) {
+    const columns = message.replace("Missing required columns:", "").split(",").map((item) => item.trim()).filter(Boolean);
+    const labels = {
+      q: "q (объем продаж)",
+      price: "price (цена)",
+      vc_percent: "vc_percent (доля переменных затрат)",
+      fc: "fc (постоянные затраты)",
+      interest: "interest (процентные расходы)",
+      tax_rate: "tax_rate (ставка налога)",
+    };
+    return `В файле отсутствуют обязательные колонки: ${columns.map((column) => labels[column] || column).join(", ")}. Проверьте заголовки в первой строке файла.`;
+  }
+
+  return message;
+}
+
+function HelpContent({ compact = false }) {
+  return (
+    <div className={compact ? "help-content compact" : "help-content"}>
+      <p className="help-kicker">Как пользоваться</p>
+      <h2>Короткая инструкция по работе с сервисом</h2>
+      <p className="help-lead">Интерфейс специально сделан в три шага: загрузка данных, выбор сценария, просмотр результатов и риска по ключевым метрикам.</p>
+
+      <div className="help-steps">
+        {HELP_STEPS.map((step) => (
+          <article key={step.title} className="help-step-card">
+            <strong>{step.title}</strong>
+            <p>{step.text}</p>
+          </article>
+        ))}
+      </div>
+
+      <div className="help-note">
+        <strong>Подсказка</strong>
+        <p>Если загрузка файла завершилась ошибкой, проверьте заголовки колонок и формат данных в первой строке.</p>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem("fsm_token") || "");
-  const [email, setEmail] = useState("demo@example.com");
-  const [password, setPassword] = useState("demo12345");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authMode, setAuthMode] = useState("login");
   const [authMessage, setAuthMessage] = useState("");
+  const [isAuthChecking, setIsAuthChecking] = useState(Boolean(localStorage.getItem("fsm_token")));
+  const [currentUser, setCurrentUser] = useState(null);
 
   const [file, setFile] = useState(null);
   const [uploadData, setUploadData] = useState(null);
@@ -66,17 +148,30 @@ export default function App() {
   const [screen, setScreen] = useState("controls");
   const [history, setHistory] = useState([]);
   const [errorMessage, setErrorMessage] = useState("");
+  const [notice, setNotice] = useState(null);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      setIsAuthChecking(false);
+      setCurrentUser(null);
+      setHistory([]);
+      return;
+    }
+
+    setIsAuthChecking(true);
     me(token)
-      .then(() => listScenarios(token))
+      .then((user) => {
+        setCurrentUser(user);
+        return listScenarios(token);
+      })
       .then((res) => setHistory(res.items || []))
       .catch(() => {
         setToken("");
         localStorage.removeItem("fsm_token");
-      });
+      })
+      .finally(() => setIsAuthChecking(false));
   }, [token]);
 
   useEffect(() => {
@@ -91,6 +186,27 @@ export default function App() {
     setScenarioFx(base.fx || 1);
   }, [uploadData]);
 
+  useEffect(() => {
+    if (!notice || notice.type !== "success") return undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      setNotice(null);
+    }, 3500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
+
+  useEffect(() => {
+    if (notice?.type !== "error" && !isHelpOpen) return undefined;
+
+    const { overflow } = document.body.style;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = overflow;
+    };
+  }, [notice, isHelpOpen]);
+
   const chartData = useMemo(() => {
     if (!resultData?.result) return [];
     const { base_result: base, scenario_result: scenario } = resultData.result;
@@ -103,30 +219,64 @@ export default function App() {
 
   const currentDelta = resultData?.result?.delta || {};
 
+  function hideNotice() {
+    setNotice(null);
+  }
+
+  function openHelp() {
+    setIsHelpOpen(true);
+  }
+
+  function closeHelp() {
+    setIsHelpOpen(false);
+  }
+
+  function showErrorNotice(title, message) {
+    const normalizedMessage = humanizeErrorMessage(message);
+    setErrorMessage(normalizedMessage);
+    setNotice({ type: "error", title, message: normalizedMessage });
+  }
+
+  function showSuccessNotice(title, message) {
+    setNotice({ type: "success", title, message });
+  }
+
   async function handleRegister() {
     try {
       setErrorMessage("");
+      hideNotice();
       await register(email, password);
-      setAuthMessage("Регистрация выполнена. Войдите в систему.");
+      setAuthMode("login");
+      setAuthMessage("Регистрация выполнена. Теперь войдите в систему.");
+      showSuccessNotice("Аккаунт создан", "Регистрация прошла успешно. Теперь можно выполнить вход.");
     } catch (err) {
-      setErrorMessage(err.message);
+      showErrorNotice("Ошибка регистрации", err.message);
     }
   }
 
   async function handleLogin() {
     try {
       setErrorMessage("");
+      hideNotice();
       const data = await login(email, password);
       setToken(data.access_token);
       localStorage.setItem("fsm_token", data.access_token);
+      setPassword("");
+      setAuthMode("login");
       setAuthMessage("Вход выполнен");
     } catch (err) {
-      setErrorMessage(err.message);
+      showErrorNotice("Ошибка входа", err.message);
     }
   }
 
   function logout() {
     setToken("");
+    setCurrentUser(null);
+    setAuthMessage("");
+    setErrorMessage("");
+    hideNotice();
+    setScreen("controls");
+    setHistory([]);
     localStorage.removeItem("fsm_token");
     setUploadData(null);
     setResultData(null);
@@ -137,10 +287,12 @@ export default function App() {
     try {
       setLoading(true);
       setErrorMessage("");
+      hideNotice();
       const data = await uploadFile(file, token);
       setUploadData(data);
+      showSuccessNotice("Файл загружен", "Исходные данные успешно загружены и готовы для расчёта сценария.");
     } catch (err) {
-      setErrorMessage(err.message);
+      showErrorNotice("Ошибка загрузки файла", err.message);
     } finally {
       setLoading(false);
     }
@@ -174,6 +326,7 @@ export default function App() {
     try {
       setLoading(true);
       setErrorMessage("");
+      hideNotice();
       const payload = {
         upload_id: uploadData.id,
         name: scenarioName,
@@ -188,7 +341,7 @@ export default function App() {
       const list = await listScenarios(token);
       setHistory(list.items || []);
     } catch (err) {
-      setErrorMessage(err.message);
+      showErrorNotice("Ошибка расчёта сценария", err.message);
     } finally {
       setLoading(false);
     }
@@ -206,32 +359,129 @@ export default function App() {
       });
       setScreen("results");
     } catch (err) {
-      setErrorMessage(err.message);
+      showErrorNotice("Ошибка загрузки результата", err.message);
     } finally {
       setLoading(false);
     }
   }
 
+  function switchAuthMode(mode) {
+    setAuthMode(mode);
+    setAuthMessage("");
+    setErrorMessage("");
+    hideNotice();
+  }
+
+  const helpModalNode = isHelpOpen ? (
+    <div className="help-overlay" role="dialog" aria-modal="true" aria-labelledby="help-title">
+      <div className="help-backdrop" onClick={closeHelp} />
+      <section className="help-modal">
+        <div className="help-modal-header">
+          <div>
+            <p className="help-kicker">Помощь</p>
+            <h2 id="help-title">Инструкция по работе с сервисом</h2>
+          </div>
+          <button type="button" className="help-close-button" onClick={closeHelp} aria-label="Закрыть инструкцию">
+            Закрыть
+          </button>
+        </div>
+        <HelpContent />
+      </section>
+    </div>
+  ) : null;
+
+  const noticeNode = notice ? (
+    notice.type === "error" ? (
+      <div className="notice-overlay" role="alertdialog" aria-modal="true" aria-live="assertive">
+        <div className="notice-backdrop" onClick={hideNotice} />
+        <div className="notice-modal notice-error">
+          <div className="notice-content">
+            <strong>{notice.title}</strong>
+            <p>{notice.message}</p>
+          </div>
+          <button type="button" className="notice-close" onClick={hideNotice} aria-label="Закрыть уведомление">
+            Понятно
+          </button>
+        </div>
+      </div>
+    ) : (
+      <div className="notice-toast notice-success" role="status" aria-live="polite">
+        <div className="notice-content">
+          <strong>{notice.title}</strong>
+          <p>{notice.message}</p>
+        </div>
+      </div>
+    )
+  ) : null;
+
+  if (isAuthChecking) {
+    return (
+      <div className="auth-shell">
+        {noticeNode}
+        <section className="auth-card">
+          <h1>Проверяем сессию...</h1>
+        </section>
+      </div>
+    );
+  }
+
+  if (!token) {
+    return (
+      <div className="auth-shell">
+        {noticeNode}
+        {helpModalNode}
+        <div className="auth-layout">
+          <section className="auth-card">
+            <p className="auth-kicker">StressTestBiz</p>
+            <h1>Вход в систему моделирования</h1>
+            <p className="auth-subtitle">Авторизуйтесь или создайте аккаунт, чтобы перейти к расчетам сценариев.</p>
+
+            <div className="auth-tabs" role="tablist" aria-label="Выбор режима авторизации">
+              <button className={authMode === "login" ? "active" : ""} onClick={() => switchAuthMode("login")}>
+                Вход
+              </button>
+              <button className={authMode === "register" ? "active" : ""} onClick={() => switchAuthMode("register")}>
+                Регистрация
+              </button>
+            </div>
+
+            <div className="auth-form">
+              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Электронная почта" autoComplete="email" />
+              <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Пароль" type="password" autoComplete={authMode === "login" ? "current-password" : "new-password"} />
+              <button onClick={authMode === "login" ? handleLogin : handleRegister} disabled={!email || !password}>
+                {authMode === "login" ? "Войти" : "Создать аккаунт"}
+              </button>
+            </div>
+
+            {authMessage && <div className="auth-message">{authMessage}</div>}
+          </section>
+
+          <aside className="auth-help-card">
+            <HelpContent compact />
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
+      {noticeNode}
+      {helpModalNode}
       <header className="header">
         <h1>Система моделирования финансовых сценариев</h1>
-        <div className="tabs">
-          <button className={screen === "controls" ? "active" : ""} onClick={() => setScreen("controls")}>Управление</button>
-          <button className={screen === "results" ? "active" : ""} onClick={() => setScreen("results")} disabled={!resultData}>Результаты</button>
+        <div className="header-actions">
+          <div className="tabs">
+            <button className={screen === "controls" ? "active" : ""} onClick={() => setScreen("controls")}>Управление</button>
+            <button className={screen === "results" ? "active" : ""} onClick={() => setScreen("results")} disabled={!resultData}>Результаты</button>
+          </div>
+          <div className="user-panel">
+            <button type="button" className="help-button" onClick={openHelp}>Помощь</button>
+            <span>{currentUser?.email || email}</span>
+            <button className="logout-button" onClick={logout}>Выйти</button>
+          </div>
         </div>
       </header>
-
-      <section className="auth-panel">
-        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Электронная почта" />
-        <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Пароль" type="password" />
-        <button onClick={handleRegister}>Регистрация</button>
-        <button onClick={handleLogin}>Войти</button>
-        <button onClick={logout}>Выйти</button>
-        <span>{authMessage}</span>
-      </section>
-
-      {errorMessage && <div className="error-box">{errorMessage}</div>}
 
       {screen === "controls" && (
         <section className="panel">
@@ -239,19 +489,37 @@ export default function App() {
           <div className="block">
             <h3>Загрузка файла</h3>
             <input type="file" accept=".csv,.json" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+            <p className="field-hint">Файл должен содержать колонки: q, price, vc_percent, fc, interest, tax_rate.</p>
             <button onClick={handleUpload} disabled={!file || loading || !token}>Загрузить</button>
             {uploadData && <pre>{JSON.stringify(uploadData.parsed_json, null, 2)}</pre>}
           </div>
 
           <div className="block">
             <h3>Выбор сценария</h3>
-            <input value={scenarioName} onChange={(e) => setScenarioName(e.target.value)} placeholder="Название сценария" />
-            <select value={scenarioType} onChange={(e) => setScenarioType(e.target.value)}>
-              <option value="fx_growth">Рост курса валюты</option>
-              <option value="demand_drop">Падение спроса</option>
-              <option value="raw_material_growth">Рост стоимости сырья</option>
-              <option value="custom">Пользовательский сценарий</option>
-            </select>
+            <div className="scenario-header">
+              <label className="scenario-name-field">
+                <span>Название сценария</span>
+                <input
+                  className="scenario-name-input"
+                  value={scenarioName}
+                  onChange={(e) => setScenarioName(e.target.value)}
+                  placeholder="Название сценария"
+                />
+              </label>
+            </div>
+
+            <div className="scenario-type-group" role="tablist" aria-label="Тип сценария">
+              {SCENARIO_TYPES.map((scenario) => (
+                <button
+                  key={scenario.key}
+                  type="button"
+                  className={scenarioType === scenario.key ? "scenario-type-button active" : "scenario-type-button"}
+                  onClick={() => setScenarioType(scenario.key)}
+                >
+                  {scenario.label}
+                </button>
+              ))}
+            </div>
 
             {scenarioType === "fx_growth" && (
               <div className="slider-row">

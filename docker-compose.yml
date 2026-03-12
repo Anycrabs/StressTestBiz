@@ -27,7 +27,6 @@ services:
       JWT_SECRET_KEY: super-secret-change-in-production
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: 120
-      ALLOWED_ORIGINS: http://localhost:3000
       HTTPS_REDIRECT: "false"
     depends_on:
       db:
@@ -39,7 +38,7 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_BASE_URL: http://localhost:8000
+        VITE_API_BASE_URL: /api
     container_name: fsm-frontend
     depends_on:
       - backend

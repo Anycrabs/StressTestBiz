@@ -18,6 +18,14 @@ class UploadService:
     """Handles upload parsing and persistence."""
 
     REQUIRED_COLUMNS = ("q", "price", "vc_percent", "fc", "interest", "tax_rate")
+    COLUMN_LABELS = {
+        "q": "q (объем продаж)",
+        "price": "price (цена)",
+        "vc_percent": "vc_percent (доля переменных затрат)",
+        "fc": "fc (постоянные затраты)",
+        "interest": "interest (процентные расходы)",
+        "tax_rate": "tax_rate (ставка налога)",
+    }
 
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -27,7 +35,10 @@ class UploadService:
 
         suffix = Path(filename).suffix.lower()
         if suffix not in {".csv", ".json"}:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only CSV and JSON files are supported")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Поддерживаются только файлы CSV и JSON.",
+            )
 
         if suffix == ".csv":
             frame = pd.read_csv(BytesIO(content))
@@ -35,16 +46,24 @@ class UploadService:
             frame = pd.read_json(BytesIO(content))
 
         if frame.empty:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file contains no rows")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Загруженный файл не содержит строк с данными.",
+            )
 
         frame.columns = [str(col).strip().lower() for col in frame.columns]
         first = frame.iloc[0].to_dict()
 
         missing = [col for col in self.REQUIRED_COLUMNS if col not in first]
         if missing:
+            missing_labels = [self.COLUMN_LABELS.get(col, col) for col in missing]
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Missing required columns: {', '.join(missing)}",
+                detail=(
+                    "В файле отсутствуют обязательные колонки: "
+                    f"{', '.join(missing_labels)}. "
+                    "Проверьте заголовки в первой строке файла."
+                ),
             )
 
         payload = FinancialInput(
